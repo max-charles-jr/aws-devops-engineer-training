@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - AWS DevOps Shop{% endblock %}
+
+{% block extra_css %}
+<style>
+    .product-detail {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+    }
+    
+    .product-image-large {
+        width: 100%;
+        border-radius: 8px;
+    }
+    
+    .product-info h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+    
+    .product-rating-large {
+        color: #FF9900;
+        font-size: 16px;
+        margin-bottom: 15px;
+    }
+    
+    .product-price-large {
+        font-size: 32px;
+        font-weight: bold;
+        color: #B12704;
+        margin: 20px 0;
+    }
+    
+    .product-description {
+        line-height: 1.6;
+        margin: 20px 0;
+        color: #565959;
+    }
+    
+    .stock-status {
+        color: #007600;
+        font-weight: bold;
+        margin: 15px 0;
+    }
+    
+    .quantity-selector {
+        margin: 20px 0;
+    }
+    
+    .quantity-selector select {
+        padding: 8px;
+        font-size: 14px;
+        border: 1px solid #D5D9D9;
+        border-radius: 8px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    .related-products {
+        margin-top: 40px;
+    }
+    
+    .related-products h2 {
+        margin-bottom: 20px;
+    }
+    
+    .related-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+    }
+    
+    .related-card {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        cursor: pointer;
+    }
+    
+    .related-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .related-image {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+    
+    @media (max-width: 768px) {
+        .product-detail {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="product-detail">
+    <div class="product-image-section">
+        <img src="{{ product.image }}" alt="{{ product.name }}" class="product-image-large">
+    </div>
+    
+    <div class="product-info">
+        <h1>{{ product.name }}</h1>
+        
+        <div class="product-rating-large">
+            ⭐ {{ product.rating }} out of 5 stars ({{ product.reviews }} reviews)
+        </div>
+        
+        <hr style="margin: 20px 0;">
+        
+        <div class="product-price-large">${{ "%.2f"|format(product.price) }}</div>
+        
+        <p class="product-description">{{ product.description }}</p>
+        
+        <div class="stock-status">
+            {% if product.in_stock %}
+            ✓ In Stock
+            {% else %}
+            Currently Unavailable
+            {% endif %}
+        </div>
+        
+        <div class="quantity-selector">
+            <label for="quantity">Quantity: </label>
+            <select id="quantity">
+                {% for i in range(1, 11) %}
+                <option value="{{ i }}">{{ i }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="addToCart()" style="padding: 12px; font-size: 16px;">
+                🛒 Add to Cart
+            </button>
+            <button class="btn btn-secondary" onclick="buyNow()" style="padding: 12px; font-size: 16px;">
+                ⚡ Buy Now
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if related_products %}
+<div class="related-products">
+    <h2>Related Products</h2>
+    <div class="related-grid">
+        {% for related in related_products %}
+        <div class="related-card" onclick="window.location.href='/product/{{ related.id }}'">
+            <img src="{{ related.image }}" alt="{{ related.name }}" class="related-image">
+            <h4>{{ related.name }}</h4>
+            <div style="color: #FF9900; font-size: 14px;">⭐ {{ related.rating }}</div>
+            <div style="font-size: 18px; font-weight: bold; color: #B12704; margin-top: 5px;">
+                ${{ "%.2f"|format(related.price) }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function addToCart() {
+        const quantity = parseInt(document.getElementById('quantity').value);
+        
+        fetch('/api/cart/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                product_id: '{{ product.id }}',
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Product added to cart!');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to add product to cart');
+        });
+    }
+    
+    function buyNow() {
+        addToCart();
+        setTimeout(() => {
+            window.location.href = '/checkout';
+        }, 500);
+    }
+</script>
+{% endblock %}

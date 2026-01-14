@@ -12,10 +12,13 @@ phases:
   pre_build:
     commands:
       - echo "Running tests..."
-      - pytest test_app.py -v --cov=app --cov-report=term-missing
+      - pytest test_app.py -v --cov=app --cov-report=term-missing --cov-report=html
       - echo "Linting code..."
-      #- pip install flake8
-      #- flake8 app.py --max-line-length=120 --ignore=E501
+      - pip install flake8
+      - flake8 app.py --max-line-length=120 --ignore=E501,W503
+      - echo "Security scan..."
+      - pip install bandit
+      - bandit -r app.py -f json -o bandit-report.json || true
   
   build:
     commands:
@@ -24,24 +27,30 @@ phases:
       - mkdir -p build
       - cp app.py build/
       - cp requirements.txt build/
+      - cp -r templates build/
       - echo "Build completed on `date`"
   
   post_build:
     commands:
       - echo "Post-build phase..."
+      - echo "Generating build info..."
+      - echo "{\"version\":\"2.0.0\",\"build_date\":\"$(date)\",\"commit\":\"$CODEBUILD_RESOLVED_SOURCE_VERSION\"}" > build/build-info.json
       - echo "Build completed successfully!"
 
 artifacts:
   files:
     - '**/*'
   base-directory: build
-  name: python-web-app-$(date +%Y%m%d-%H%M%S)
+  name: ecommerce-app-$(date +%Y%m%d-%H%M%S)
 
 reports:
   pytest_reports:
     files:
-      - 'test-results.xml'
-    file-format: JUNITXML
+      - 'htmlcov/index.html'
+    file-format: HTML
+  coverage_reports:
+    files:
+      - '.coverage'
 
 cache:
   paths:
