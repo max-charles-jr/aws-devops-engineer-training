@@ -27,9 +27,10 @@ phases:
     commands:
       - echo "Building application..."
       - mkdir -p build
-      - cp * build/
-      #- cp requirements.txt build/
-      #- cp -r templates build/
+      - cp appspec.yml build/
+      - cp app.py build/
+      - cp requirements.txt build/
+      - cp -r templates build/
   
   post_build:
     commands:
