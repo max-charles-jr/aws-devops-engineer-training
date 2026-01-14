@@ -13,8 +13,8 @@ phases:
       python: 3.11
     commands:
       - echo "Installing dependencies..."
-      - echo "Branch: $CODEBUILD_WEBHOOK_HEAD_REF"
-      - echo "Commit: $CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - 'echo "Branch: $CODEBUILD_WEBHOOK_HEAD_REF"'
+      - 'echo "Commit: $CODEBUILD_RESOLVED_SOURCE_VERSION"'
       - pip install --upgrade pip
       - pip install -r requirements.txt
   
