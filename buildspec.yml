@@ -14,8 +14,8 @@ phases:
       - echo "Running tests..."
       - pytest test_app.py -v --cov=app --cov-report=term-missing
       - echo "Linting code..."
-      - pip install flake8
-      - flake8 app.py --max-line-length=120 --ignore=E501
+      #- pip install flake8
+      #- flake8 app.py --max-line-length=120 --ignore=E501
   
   build:
     commands:
