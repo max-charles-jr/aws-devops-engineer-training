@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EventBridge rule to trigger CodeBuild on CodeCommit push'
+
+Parameters:
+  RepositoryName:
+    Type: String
+    Default: myFirstPythonApp
+    Description: CodeCommit repository name
+  
+  CodeBuildProjectName:
+    Type: String
+    Default: myFirstPythonApp
+    Description: CodeBuild project name
+
+Resources:
+  CodeBuildTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StartCodeBuild
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuildProjectName}'
+
+  CodeCommitTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${CodeBuildProjectName}-codecommit-trigger'
+      Description: Trigger CodeBuild on CodeCommit push to main or develop
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - CodeCommit Repository State Change
+        detail:
+          event:
+            - referenceCreated
+            - referenceUpdated
+          referenceType:
+            - branch
+          referenceName:
+            - main
+            - develop
+        resources:
+          - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${RepositoryName}'
+      State: ENABLED
+      Targets:
+        - Arn: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuildProjectName}'
+          RoleArn: !GetAtt CodeBuildTriggerRole.Arn
+          Id: CodeBuildTarget
+
+Outputs:
+  RuleName:
+    Value: !Ref CodeCommitTriggerRule
