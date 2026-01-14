@@ -31,6 +31,7 @@ phases:
       - cp app.py build/
       - cp requirements.txt build/
       - cp -r templates build/
+      - cp -r scripts build/
   
   post_build:
     commands:
