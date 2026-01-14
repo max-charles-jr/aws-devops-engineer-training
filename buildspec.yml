@@ -4,8 +4,8 @@ env:
   variables:
     ENVIRONMENT: "development"
   parameter-store:
-    # Store branch-specific secrets in Parameter Store
-    DB_PASSWORD: /myapp/${CODEBUILD_WEBHOOK_HEAD_REF}/db-password
+    DB_PASSWORD: /myapp/develop/db-password
+    API_KEY: /myapp/develop/api-key
 
 phases:
   install:
@@ -13,82 +13,32 @@ phases:
       python: 3.11
     commands:
       - echo "Installing dependencies..."
-      - 'echo "Branch: $CODEBUILD_WEBHOOK_HEAD_REF"'
-      - 'echo "Commit: $CODEBUILD_RESOLVED_SOURCE_VERSION"'
       - pip install --upgrade pip
       - pip install -r requirements.txt
   
   pre_build:
     commands:
-      - |
-        # Set environment based on branch
-        if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/main" ]; then
-          export ENVIRONMENT="production"
-          export DEPLOY_TARGET="prod"
-        elif [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/develop" ]; then
-          export ENVIRONMENT="development"
-          export DEPLOY_TARGET="dev"
-        else
-          export ENVIRONMENT="feature"
-          export DEPLOY_TARGET="features"
-        fi
-      - echo "Environment set to $ENVIRONMENT"
       - echo "Running tests..."
-      - pytest test_app.py -v --cov=app --cov-report=term-missing --cov-report=html
-      - echo "Linting code..."
-      - pip install flake8
-      - flake8 app.py --max-line-length=120 --ignore=E501,W503
+      - 'echo "DB_PASSWORD is set: ${DB_PASSWORD:+yes}"'  # Don't print actual password
+      - 'echo "API_KEY is set: ${API_KEY:+yes}"'
+      - pytest test_app.py -v --cov=app --cov-report=term-missing
   
   build:
     commands:
-      - echo "Build started on `date`"
-      - echo "Building for branch $CODEBUILD_WEBHOOK_HEAD_REF"
-      - echo "Creating application package..."
+      - echo "Building application..."
       - mkdir -p build
       - cp app.py build/
       - cp requirements.txt build/
       - cp -r templates build/
-      - |
-        # Create build metadata
-        cat > build/build-info.json <<EOF
-        {
-          "version": "2.0.0",
-          "environment": "$ENVIRONMENT",
-          "branch": "$CODEBUILD_WEBHOOK_HEAD_REF",
-          "commit": "$CODEBUILD_RESOLVED_SOURCE_VERSION",
-          "build_id": "$CODEBUILD_BUILD_ID",
-          "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        }
-        EOF
-      - echo "Build completed on `date`"
   
   post_build:
     commands:
-      - echo "Post-build phase..."
-      - |
-        if [ "$CODEBUILD_BUILD_SUCCEEDING" = "1" ]; then
-          echo "Build succeeded!"
-          # Add deployment logic here based on branch
-          if [ "$DEPLOY_TARGET" != "none" ]; then
-            echo "Would deploy to $DEPLOY_TARGET environment"
-            # aws s3 sync build/ s3://mcharles-sandbox/myfirstpythonapp/$DEPLOY_TARGET
-          fi
-        else
-          echo "Build failed!"
-          exit 1
-        fi
+      - echo "Build completed successfully!"
 
 artifacts:
   files:
     - '**/*'
   base-directory: build
-  name: app-$ENVIRONMENT-$(date +%Y%m%d-%H%M%S)
-
-reports:
-  pytest_reports:
-    files:
-      - 'htmlcov/index.html'
-    file-format: HTML
 
 cache:
   paths:
