@@ -1,0 +1,397 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EC2 instance with CodeDeploy agent for Python web application deployment'
+
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t2.micro
+      - t2.small
+      - t2.medium
+    ConstraintDescription: Must be a valid EC2 instance type
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair
+
+  SubnetId:
+    Description: Subnet ID where the EC2 instance will be launched
+    Type: AWS::EC2::Subnet::Id
+
+  SecurityGroupIds:
+    Description: Security Group IDs (comma-separated list)
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+  LatestAmiId:
+    Description: Latest Amazon Linux 2023 AMI ID (automatically resolved)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  ApplicationName:
+    Description: Name of the CodeDeploy application
+    Type: String
+    Default: PythonWebApp
+
+  DeploymentGroupName:
+    Description: Name of the CodeDeploy deployment group
+    Type: String
+    Default: PythonWebApp-DeploymentGroup
+
+  Environment:
+    Description: Environment name (dev, staging, prod)
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+Resources:
+  # IAM Role for EC2 Instance (Instance Profile)
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ApplicationName}-EC2-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore  # For Systems Manager
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy    # For CloudWatch metrics/logs
+      Policies:
+        - PolicyName: CodeDeployS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::aws-codedeploy-${AWS::Region}/*'
+                  - !Sub 'arn:aws:s3:::${ApplicationName}-artifacts-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::${ApplicationName}-artifacts-${AWS::AccountId}'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ApplicationName}/*'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ApplicationName}/*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ApplicationName}-EC2-Role'
+        - Key: Environment
+          Value: !Ref Environment
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${ApplicationName}-InstanceProfile-${Environment}'
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: !Ref SecurityGroupIds
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          # Update system
+          dnf update -y
+          
+          # Install Python 3 and pip
+          dnf install -y python3 python3-pip
+          
+          # Install CodeDeploy agent
+          dnf install -y ruby wget
+          cd /home/ec2-user
+          wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install
+          chmod +x ./install
+          ./install auto
+          
+          # Start and enable CodeDeploy agent
+          systemctl start codedeploy-agent
+          systemctl enable codedeploy-agent
+          
+          # Install CloudWatch agent
+          wget https://s3.${AWS::Region}.amazonaws.com/amazoncloudwatch-agent-${AWS::Region}/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+          rpm -U ./amazon-cloudwatch-agent.rpm
+          
+          # Create application directory
+          mkdir -p /var/www/app
+          chown ec2-user:ec2-user /var/www/app
+          
+          # Install common Python packages
+          pip3 install flask gunicorn boto3
+          
+          # Create CloudWatch config for application logs
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json <<'EOF'
+          {
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/app/*.log",
+                      "log_group_name": "/aws/ec2/${ApplicationName}/${Environment}",
+                      "log_stream_name": "{instance_id}/application",
+                      "timezone": "UTC"
+                    },
+                    {
+                      "file_path": "/var/log/codedeploy-agent/codedeploy-agent.log",
+                      "log_group_name": "/aws/ec2/${ApplicationName}/${Environment}",
+                      "log_stream_name": "{instance_id}/codedeploy",
+                      "timezone": "UTC"
+                    }
+                  ]
+                }
+              }
+            },
+            "metrics": {
+              "namespace": "${ApplicationName}/${Environment}",
+              "metrics_collected": {
+                "mem": {
+                  "measurement": [
+                    {"name": "mem_used_percent", "rename": "MemoryUtilization", "unit": "Percent"}
+                  ],
+                  "metrics_collection_interval": 60
+                },
+                "disk": {
+                  "measurement": [
+                    {"name": "used_percent", "rename": "DiskUtilization", "unit": "Percent"}
+                  ],
+                  "metrics_collection_interval": 60,
+                  "resources": ["*"]
+                }
+              }
+            }
+          }
+          EOF
+          
+          # Start CloudWatch agent
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+            -a fetch-config \
+            -m ec2 \
+            -s \
+            -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+          
+          # Create log directory for application
+          mkdir -p /var/log/app
+          chown ec2-user:ec2-user /var/log/app
+          
+          # Signal CloudFormation that instance is ready
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: !Sub '${ApplicationName}-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+
+  # CloudWatch Log Group
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/ec2/${ApplicationName}/${Environment}'
+      RetentionInDays: 7
+
+  # CodeDeploy Application
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+      ComputePlatform: Server
+
+  # IAM Role for CodeDeploy
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ApplicationName}-CodeDeploy-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      Tags:
+        - Key: Name
+          Value: !Sub '${ApplicationName}-CodeDeploy-Role'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CodeDeploy Deployment Group
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: !Ref DeploymentGroupName
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.OneAtATime
+      Ec2TagFilters:
+        - Type: KEY_AND_VALUE
+          Key: Application
+          Value: !Ref ApplicationName
+        - Type: KEY_AND_VALUE
+          Key: Environment
+          Value: !Ref Environment
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+          - DEPLOYMENT_STOP_ON_ALARM
+      AlarmConfiguration:
+        Enabled: true
+        Alarms:
+          - Name: !Ref InstanceHealthAlarm
+
+  # CloudWatch Alarm for Instance Health
+  InstanceHealthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ApplicationName}-${Environment}-InstanceHealth'
+      AlarmDescription: Triggers if instance status check fails
+      MetricName: StatusCheckFailed
+      Namespace: AWS/EC2
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2Instance
+      TreatMissingData: notBreaching
+
+  # SNS Topic for Deployment Notifications
+  DeploymentNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ApplicationName}-${Environment}-Deployments'
+      DisplayName: !Sub '${ApplicationName} Deployment Notifications'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # EventBridge Rule for CodeDeploy Events
+  DeploymentEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ApplicationName}-${Environment}-DeploymentEvents'
+      Description: Capture CodeDeploy deployment state changes
+      EventPattern:
+        source:
+          - aws.codedeploy
+        detail-type:
+          - CodeDeploy Deployment State-change Notification
+        detail:
+          application:
+            - !Ref ApplicationName
+          deploymentGroup:
+            - !Ref DeploymentGroupName
+      State: ENABLED
+      Targets:
+        - Arn: !Ref DeploymentNotificationTopic
+          Id: SNSTarget
+
+  # SNS Topic Policy for EventBridge
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DeploymentNotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref DeploymentNotificationTopic
+
+Outputs:
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref EC2Instance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  InstancePrivateIP:
+    Description: Private IP address of the EC2 instance
+    Value: !GetAtt EC2Instance.PrivateIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateIP'
+
+  InstancePublicIP:
+    Description: Public IP address of the EC2 instance (if in public subnet)
+    Value: !GetAtt EC2Instance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  CodeDeployApplicationName:
+    Description: CodeDeploy Application Name
+    Value: !Ref CodeDeployApplication
+    Export:
+      Name: !Sub '${AWS::StackName}-CodeDeployApp'
+
+  CodeDeployDeploymentGroupName:
+    Description: CodeDeploy Deployment Group Name
+    Value: !Ref CodeDeployDeploymentGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-DeploymentGroup'
+
+  InstanceRoleArn:
+    Description: IAM Role ARN for the EC2 instance
+    Value: !GetAtt EC2InstanceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceRoleArn'
+
+  LogGroupName:
+    Description: CloudWatch Log Group Name
+    Value: !Ref ApplicationLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroup'
+
+  DeploymentNotificationTopicArn:
+    Description: SNS Topic ARN for deployment notifications
+    Value: !Ref DeploymentNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-NotificationTopic'
+
+  SSMSessionCommand:
+    Description: Command to connect via Systems Manager Session Manager
+    Value: !Sub 'aws ssm start-session --target ${EC2Instance}'
