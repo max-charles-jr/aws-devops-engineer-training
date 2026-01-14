@@ -1,0 +1,48 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing dependencies..."
+      - pip install --upgrade pip
+      - pip install -r requirements.txt
+  
+  pre_build:
+    commands:
+      - echo "Running tests..."
+      - pytest test_app.py -v --cov=app --cov-report=term-missing
+      - echo "Linting code..."
+      - pip install flake8
+      - flake8 app.py --max-line-length=120 --ignore=E501
+  
+  build:
+    commands:
+      - echo "Build started on `date`"
+      - echo "Creating application package..."
+      - mkdir -p build
+      - cp app.py build/
+      - cp requirements.txt build/
+      - echo "Build completed on `date`"
+  
+  post_build:
+    commands:
+      - echo "Post-build phase..."
+      - echo "Build completed successfully!"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: build
+  name: python-web-app-$(date +%Y%m%d-%H%M%S)
+
+reports:
+  pytest_reports:
+    files:
+      - 'test-results.xml'
+    file-format: JUNITXML
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'
