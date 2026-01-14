@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AWS DevOps Shop{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Amazon Ember', Arial, sans-serif;
+            background-color: #f3f3f3;
+            color: #0F1111;
+        }
+        
+        /* Header Styles */
+        .header {
+            background-color: #131921;
+            color: white;
+            padding: 10px 20px;
+        }
+        
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1500px;
+            margin: 0 auto;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #FF9900;
+            text-decoration: none;
+            padding: 10px;
+        }
+        
+        .search-bar {
+            flex-grow: 1;
+            margin: 0 20px;
+            display: flex;
+        }
+        
+        .search-bar input {
+            flex-grow: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px 0 0 4px;
+            font-size: 14px;
+        }
+        
+        .search-bar button {
+            background-color: #FF9900;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            color: #131921;
+            font-weight: bold;
+        }
+        
+        .search-bar button:hover {
+            background-color: #ec8b00;
+        }
+        
+        .cart-link {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+        
+        .cart-count {
+            background-color: #FF9900;
+            color: #131921;
+            border-radius: 50%;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .header-nav {
+            background-color: #232F3E;
+            padding: 8px 20px;
+        }
+        
+        .nav-links {
+            max-width: 1500px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        
+        .nav-links a:hover {
+            border: 1px solid white;
+            border-radius: 2px;
+        }
+        
+        /* Main Content */
+        .container {
+            max-width: 1500px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: #232F3E;
+            color: white;
+            padding: 40px 20px;
+            margin-top: 40px;
+            text-align: center;
+        }
+        
+        .footer-content {
+            max-width: 1500px;
+            margin: 0 auto;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+        
+        .footer-links a {
+            color: #DDD;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Utility Classes */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .btn-primary {
+            background-color: #FF9900;
+            color: #131921;
+        }
+        
+        .btn-primary:hover {
+            background-color: #ec8b00;
+        }
+        
+        .btn-secondary {
+            background-color: #FFA724;
+            color: #131921;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #ff9900;
+        }
+        
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-top">
+            <a href="/" class="logo">🛒 DevOps Shop</a>
+            
+            <form class="search-bar" action="/" method="get">
+                <input type="text" name="search" placeholder="Search products..." value="{{ search_term or '' }}">
+                <button type="submit">Search</button>
+            </form>
+            
+            <a href="/cart" class="cart-link">
+                🛒 Cart
+                {% if cart_count > 0 %}
+                <span class="cart-count">{{ cart_count }}</span>
+                {% endif %}
+            </a>
+        </div>
+        
+        <nav class="header-nav">
+            <div class="nav-links">
+                <a href="/?category=all">All Products</a>
+                <a href="/?category=Electronics">Electronics</a>
+                <a href="/?category=Books">Books</a>
+                <a href="/?category=Office">Office</a>
+            </div>
+        </nav>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <a href="#">About Us</a>
+                <a href="#">Contact</a>
+                <a href="#">Privacy Policy</a>
+                <a href="/health">System Health</a>
+            </div>
+            <p>&copy; 2026 AWS DevOps Shop - Demo Application for CI/CD Training</p>
+            <p style="margin-top: 10px; font-size: 12px; color: #999;">Version 2.0.0 | Environment: {{ request.environ.get('ENVIRONMENT', 'development') }}</p>
+        </div>
+    </footer>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
