@@ -26,12 +26,9 @@ phases:
   build:
     commands:
       - echo "Building application..."
-      - mkdir -p build
-      - cp appspec.yml build/
-      - cp app.py build/
-      - cp requirements.txt build/
-      - cp -r templates build/
-      - cp -r scripts build/
+      - echo "Build started on $(date)"
+      - chmod +x scripts/*.sh
+      - echo "Build completed on $(date)"
   
   post_build:
     commands:
@@ -39,8 +36,13 @@ phases:
 
 artifacts:
   files:
-    - '**/*'
-  base-directory: build
+    - appspec.yml
+    - app.py
+    - requirements.txt
+    - 'scripts/**/*'
+    - '**/*.py'
+  discard-paths: no          # Keep directory structure
+  name: BuildArtifact
 
 cache:
   paths:
