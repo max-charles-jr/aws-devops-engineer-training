@@ -35,13 +35,14 @@ phases:
       - echo "Build completed successfully!"
 
 artifacts:
+  files:
     - appspec.yml
     - app.py
     - requirements.txt
     - 'scripts/**/*'
-    - test_app.py
-  #discard-paths: no          # Keep directory structure    
-  base-directory: BuildArtifact
+    - '**/*.py'
+  discard-paths: no          # Keep directory structure
+  name: BuildArtifact
 
 cache:
   paths:
