@@ -39,7 +39,7 @@ artifacts:
     - app.py
     - requirements.txt
     - 'scripts/**/*'
-    - '**/*.py'
+    - test_app.py
   discard-paths: no          # Keep directory structure    
   base-directory: BuildArtifact
 
