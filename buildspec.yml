@@ -40,7 +40,7 @@ artifacts:
     - requirements.txt
     - 'scripts/**/*'
     - test_app.py
-  discard-paths: no          # Keep directory structure    
+  #discard-paths: no          # Keep directory structure    
   base-directory: BuildArtifact
 
 cache:
